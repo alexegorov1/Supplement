@@ -1,0 +1,427 @@
+from typing import List, Dict
+from SupplementDosage import SupplementDosage
+from SupplementInventory import SupplementInventory
+from SupplementUsageHistory import SupplementUsageHistory
+from SupplementNotifier import SupplementNotifier
+from SupplementDatabase import SupplementDatabase
+from UserAccount import UserAccount
+from datetime import datetime, timedelta
+
+class SupplementUI:
+    def __init__(self, supplement_dosage: SupplementDosage, supplement_inventory: SupplementInventory,
+                 supplement_usage_history: SupplementUsageHistory, supplement_notifier: SupplementNotifier,
+                 supplement_database: SupplementDatabase, user_account: UserAccount):
+        self.supplement_dosage = supplement_dosage
+        self.supplement_inventory = supplement_inventory
+        self.supplement_usage_history = supplement_usage_history
+        self.supplement_notifier = supplement_notifier
+        self.supplement_database = supplement_database
+        self.user_account = user_account
+
+    def display_dashboard(self, sort_by: str = 'name', filter_by: Dict = None) -> List[Dict]:
+        """
+        Display the user's supplements and their dosage information in a dashboard view.
+
+        Args:
+            sort_by (str): The attribute to sort the supplements by. Defaults to 'name'.
+            filter_by (Dict): A dictionary of filter criteria to apply. Defaults to None.
+
+        Returns:
+            A list of dictionaries containing supplement information and dosage information.
+        """
+
+        supplements = self.supplement_dosage.get_supplements()
+
+        # Apply filters if specified
+        if filter_by:
+            for key, value in filter_by.items():
+                supplements = [supplement for supplement in supplements if supplement[key] == value]
+
+        # Sort supplements by the specified attribute
+        supplements.sort(key=lambda supplement: supplement[sort_by])
+
+        dashboard = []
+
+        # Create dictionary for each supplement with relevant information
+        for supplement in supplements:
+            dosage_info = self.supplement_dosage.get_dosage_info(supplement['name'])
+            supplement_info = {
+                'name': supplement['name'],
+                'purpose': supplement['purpose'],
+                'active_ingredients': supplement['active_ingredients'],
+                'recommended_dosage': dosage_info['recommended_dosage'],
+                'current_dosage': dosage_info['current_dosage'],
+                'remaining_quantity': self.supplement_inventory.get_remaining_quantity(supplement['name'])
+            }
+            dashboard.append(supplement_info)
+
+        return dashboard
+
+        # Prompt the user to add more supplements to their inventory
+        while True:
+            add_more = input("Would you like to add more supplements to your inventory? (y/n)").lower()
+            if add_more == "y":
+                supplement_name = input("Enter the name of the supplement: ")
+                supplement_quantity = int(input("Enter the quantity of the supplement: "))
+                supplement_unit = input("Enter the unit of the supplement (e.g. capsules, tablets, ounces): ")
+                self.supplement_inventory.add_supplement(supplement_name, supplement_quantity, supplement_unit)
+            elif add_more == "n":
+                break
+            else:
+                print("Invalid input. Please enter 'y' or 'n'.")
+
+        # Prompt the user to remove supplements from their inventory
+        while True:
+            remove = input("Would you like to remove any supplements from your inventory? (y/n)").lower()
+            if remove == "y":
+                supplement_name = input("Enter the name of the supplement to remove: ")
+                if self.supplement_inventory.remove_supplement(supplement_name):
+                    print(f"{supplement_name} removed from inventory.")
+                else:
+                    print(f"{supplement_name} not found in inventory.")
+            elif remove == "n":
+                break
+            else:
+                print("Invalid input. Please enter 'y' or 'n'.")
+
+    def display_usage_history(self):
+        # Display the user's usage history for each supplement
+        usage_history = self.supplement_usage_history.get_usage_history()
+        if not usage_history:
+            print("No usage history found.")
+        else:
+            print("Usage History:\n")
+            for supplement, dates in usage_history.items():
+                print(f"{supplement}:")
+                for date, amount in dates.items():
+                    print(f"\t{date}: {amount} {self.supplement_dosage.get_dosage_unit(supplement)}")
+
+        # Prompt the user to add usage information for a supplement
+        while True:
+            add_more = input("Would you like to add usage information for a supplement? (y/n)").lower()
+            if add_more == "y":
+                supplement_name = input("Enter the name of the supplement: ")
+                if supplement_name not in self.supplement_info.get_supplement_names():
+                    print("Supplement not found. Please try again.")
+                    continue
+                supplement_dosage = self.supplement_dosage.get_dosage(supplement_name)
+                supplement_amount = float(
+                    input(f"Enter the amount of {self.supplement_dosage.get_dosage_unit(supplement_name)} taken: "))
+                supplement_date = input("Enter the date taken (MM/DD/YYYY): ")
+                self.supplement_usage_history.add_usage(supplement_name, supplement_amount, supplement_date)
+            elif add_more == "n":
+                break
+            else:
+                print("Invalid input. Please enter 'y' or 'n'.")
+
+    def display_settings(self):
+        print("Settings:")
+
+        # Display reminder preferences
+        print("Reminder preferences:")
+        reminder_prefs = self.supplement_notifier.get_reminder_preferences()
+        if not reminder_prefs:
+            print("No reminder preferences set.")
+        else:
+            for pref in reminder_prefs:
+                print(f"{pref}: {reminder_prefs[pref]}")
+
+        # Allow the user to update reminder preferences
+        while True:
+            update_reminders = input("Would you like to update your reminder preferences? (y/n)").lower()
+            if update_reminders == "y":
+                for pref in reminder_prefs:
+                    new_pref = input(f"Enter new value for {pref} (current value: {reminder_prefs[pref]}): ")
+                    self.supplement_notifier.set_reminder_preference(pref, new_pref)
+            elif update_reminders == "n":
+                break
+            else:
+                print("Invalid input. Please enter 'y' or 'n'.")
+
+        # Display account information
+        print("Account information:")
+        account_info = self.user_account.get_account_information()
+        for info in account_info:
+            print(f"{info}: {account_info[info]}")
+
+        # Allow the user to update account information
+        while True:
+            update_account = input("Would you like to update your account information? (y/n)").lower()
+            if update_account == "y":
+                for info in account_info:
+                    new_info = input(f"Enter new value for {info} (current value: {account_info[info]}): ")
+                    self.user_account.set_account_information(info, new_info)
+            elif update_account == "n":
+                break
+            else:
+                print("Invalid input. Please enter 'y' or 'n'.")
+
+    class SupplementTracker:
+        def __init__(self, supplement_database, supplement_dosage, supplement_inventory):
+            self.supplement_database = supplement_database
+            self.supplement_dosage = supplement_dosage
+            self.supplement_inventory = supplement_inventory
+
+        def add_supplement(self, name, purpose, active_ingredients):
+            # Check if the supplement already exists in the database
+            if self.supplement_database.get_supplement_by_name(name):
+                print(f"{name} already exists in the database.")
+                return
+
+            # Add the supplement to the database
+            supplement_id = self.supplement_database.add_supplement(name, purpose, active_ingredients)
+
+            # Display a confirmation message to the user
+            print(f"{name} added to your supplements with ID: {supplement_id}")
+
+            # Prompt the user to add dosage information for the new supplement
+            while True:
+                add_dosage = input("Would you like to add dosage information for this supplement? (y/n)").lower()
+                if add_dosage == "y":
+                    dosage = input("Enter the recommended daily dosage for the supplement: ")
+                    self.supplement_dosage.add_dosage(supplement_id, dosage)
+                    print(f"Dosage information added for {name}.")
+                    break
+                elif add_dosage == "n":
+                    break
+                else:
+                    print("Invalid input. Please enter 'y' or 'n'.")
+
+            # Prompt the user to add inventory information for the new supplement
+            while True:
+                add_inventory = input("Would you like to add inventory information for this supplement? (y/n)").lower()
+                if add_inventory == "y":
+                    quantity = int(input("Enter the quantity of the supplement in your inventory: "))
+                    unit = input("Enter the unit of the supplement (e.g. capsules, tablets, ounces): ")
+                    self.supplement_inventory.add_supplement(name, quantity, unit)
+                    print(f"{name} added to your inventory.")
+                    break
+                elif add_inventory == "n":
+                    break
+                else:
+                    print("Invalid input. Please enter 'y' or 'n'.")
+
+        def display_supplement_info(self):
+            supplement_names = self.supplement_database.get_all_supplement_names()
+
+            if not supplement_names:
+                print("No supplements found in the database.")
+                return
+
+            print("Supplement Information:\n")
+            for name in supplement_names:
+                supplement = self.supplement_database.get_supplement_by_name(name)
+                dosage = self.supplement_dosage.get_dosage(name)
+                inventory = self.supplement_inventory.get_supplement_inventory(name)
+
+                print(f"{name}:")
+                print(f"\tPurpose: {supplement.purpose}")
+                print(f"\tActive Ingredients: {supplement.active_ingredients}")
+                print(f"\tRecommended Dosage: {dosage.dosage} {dosage.unit}")
+                print(f"\tInventory: {inventory.quantity} {inventory.unit}")
+
+        def edit_supplement(self, supplement_id, name=None, purpose=None, active_ingredients=None):
+            # Enable the user to edit an existing supplement in their tracker
+            supplement = self.get_supplement_by_id(supplement_id)
+            if not supplement:
+                print("Supplement not found.")
+                return
+
+            if name:
+                supplement['name'] = name
+            if purpose:
+                supplement['purpose'] = purpose
+            if active_ingredients:
+                supplement['active_ingredients'] = active_ingredients
+
+            print(f"{supplement['name']} updated in supplement tracker.")
+
+        def get_supplement_by_id(self, supplement_id):
+            # Get the supplement with the specified ID
+            for supplement in self.supplements:
+                if supplement['id'] == supplement_id:
+                    return supplement
+            return None
+
+    def delete_supplement(self, supplement_id):
+        """
+        Deletes a supplement from the user's tracker.
+        """
+
+        # Get the supplement from the tracker
+        supplement = self.supplement_info.get_supplement(supplement_id)
+
+        # If the supplement does not exist, display an error message
+        if not supplement:
+            print("Supplement not found.")
+            return
+
+        # Confirm that the user wants to delete the supplement
+        confirm = input(f"Are you sure you want to delete {supplement['name']} from your tracker? (y/n)").lower()
+
+        if confirm == "y":
+            # Remove the supplement from the tracker
+            self.supplement_info.delete_supplement(supplement_id)
+            print(f"{supplement['name']} deleted from your tracker.")
+        elif confirm == "n":
+            print(f"{supplement['name']} was not deleted.")
+        else:
+            print("Invalid input. Please enter 'y' or 'n'.")
+
+    def update_dosage(self, supplement_id, dosage):
+        # Update the dosage information for a specific supplement
+        supplement = self.supplement_info.get_supplement_by_id(supplement_id)
+        if supplement:
+            # Check if the new dosage is within the recommended dosage range
+            if dosage < supplement["min_dosage"]:
+                print("Warning: The new dosage is below the recommended range.")
+            elif dosage > supplement["max_dosage"]:
+                print("Warning: The new dosage is above the recommended range.")
+
+            # Update the dosage information for the supplement
+            self.supplement_dosage.update_dosage(supplement_id, dosage)
+            print(f"Dosage updated for {supplement['name']}.\nNew dosage: {dosage} {supplement['dosage_unit']}")
+        else:
+            print("Supplement not found.")
+
+    def update_inventory(self, supplement_id, quantity):
+        # Update the inventory information for a specific supplement
+        supplement = self.supplement_info.get_supplement(supplement_id)
+        if not supplement:
+            print(f"Supplement with ID {supplement_id} not found.")
+            return
+
+        # Update the quantity of the supplement in the inventory
+        old_quantity = supplement.get("inventory_quantity", 0)
+        new_quantity = old_quantity + quantity
+        if new_quantity < 0:
+            print("Error: quantity cannot be negative.")
+            return
+        supplement["inventory_quantity"] = new_quantity
+
+        # Update the supplement information in the database
+        self.supplement_info.update_supplement(supplement_id, supplement)
+        print(f"{supplement['name']} inventory updated: {new_quantity} {supplement['inventory_unit']} remaining.")
+
+    # Constructor with initialization of usage_history
+    def __init__(self):
+        self.usage_history = {}
+
+    def update_usage(self, supplement_id, date, amount):
+        # Check if the supplement_id exists in usage_history
+        if supplement_id not in self.usage_history:
+            self.usage_history[supplement_id] = []
+        # Convert date string to datetime object
+        usage_date = datetime.strptime(date, "%Y-%m-%d").date()
+        # Append new usage entry to usage_history
+        self.usage_history[supplement_id].append({'date': usage_date, 'amount': amount})
+
+    def get_usage_history(self, supplement_id):
+        # Return the usage history for a specific supplement
+        if supplement_id in self.usage_history:
+            return self.usage_history[supplement_id]
+        else:
+            return []
+
+    def get_daily_usage(self, supplement_id, date):
+        # Return the amount of a specific supplement taken on a specific day
+        daily_usage = 0
+        if supplement_id in self.usage_history:
+            # Convert date string to datetime object
+            target_date = datetime.strptime(date, "%Y-%m-%d").date()
+            # Iterate through usage entries and sum up usage for target_date
+            for entry in self.usage_history[supplement_id]:
+                if entry['date'] == target_date:
+                    daily_usage += entry['amount']
+        return daily_usage
+
+    def get_weekly_usage(self, supplement_id, date):
+        # Return the amount of a specific supplement taken in the past week
+        weekly_usage = 0
+        if supplement_id in self.usage_history:
+            # Convert date string to datetime object
+            target_date = datetime.strptime(date, "%Y-%m-%d").date()
+            # Calculate date range for the past week
+            start_date = target_date - timedelta(days=7)
+            end_date = target_date
+            # Iterate through usage entries and sum up usage for the date range
+            for entry in self.usage_history[supplement_id]:
+                if start_date <= entry['date'] <= end_date:
+                    weekly_usage += entry['amount']
+        return weekly_usage
+
+    class SupplementReminder:
+
+        # Constructor with initialization of reminders
+        def __init__(self):
+            self.reminders = {}
+
+        def set_reminder(self, supplement_id, reminder_time, reminder_frequency):
+            # Convert reminder time string to datetime object
+            reminder_datetime = datetime.datetime.strptime(reminder_time, '%H:%M').time()
+            # Check if the supplement_id exists in reminders
+            if supplement_id not in self.reminders:
+                self.reminders[supplement_id] = {}
+            # Create or update reminder information for the supplement
+            self.reminders[supplement_id]['time'] = reminder_datetime
+            self.reminders[supplement_id]['frequency'] = reminder_frequency
+
+        def get_next_reminder(self, supplement_id):
+            # Check if the supplement has a reminder set
+            if supplement_id not in self.reminders:
+                return None
+            # Get the reminder time and frequency
+            reminder_time = self.reminders[supplement_id]['time']
+            reminder_frequency = self.reminders[supplement_id]['frequency']
+            # Get the current time and date
+            current_time = datetime.datetime.now().time()
+            current_date = datetime.date.today()
+            # Check if the current time is after the reminder time for today
+            if current_time > reminder_time:
+                # If so, set the next reminder for tomorrow
+                next_reminder_date = current_date + datetime.timedelta(days=1)
+            else:
+                next_reminder_date = current_date
+            # Combine the next reminder date and time into a datetime object
+            next_reminder_datetime = datetime.datetime.combine(next_reminder_date, reminder_time)
+            # Calculate the time until the next reminder
+            time_until_next_reminder = (next_reminder_datetime - datetime.datetime.now()).total_seconds()
+            # Convert the reminder frequency to seconds
+            if reminder_frequency == 'daily':
+                reminder_frequency_seconds = 86400
+            elif reminder_frequency == 'weekly':
+                reminder_frequency_seconds = 604800
+            elif reminder_frequency == 'monthly':
+                reminder_frequency_seconds = 2592000
+            # Set the next reminder time and frequency in the reminders dictionary
+            self.reminders[supplement_id]['next_reminder'] = next_reminder_datetime
+            self.reminders[supplement_id]['frequency_seconds'] = reminder_frequency_seconds
+            # Return the time until the next reminder
+            return time_until_next_reminder
+
+    def filter_supplements(self, purpose=None, active_ingredients=None):
+        # Enable the user to filter and sort supplements based on purpose and active ingredients
+        filtered_supplements = []
+
+        # Filter supplements by purpose
+        if purpose:
+            filtered_supplements = [s for s in self.supplements if s['purpose'] == purpose]
+        else:
+            filtered_supplements = self.supplements
+
+        # Filter supplements by active ingredients
+        if active_ingredients:
+            active_ingredients = set(active_ingredients)
+            filtered_supplements = [s for s in filtered_supplements if
+                                    set(s['active_ingredients']) == active_ingredients]
+
+        # Sort supplements by name
+        filtered_supplements = sorted(filtered_supplements, key=lambda s: s['name'])
+
+        # Print filtered and sorted supplements
+        if filtered_supplements:
+            print("Filtered Supplements:\n")
+            for supplement in filtered_supplements:
+                print(f"{supplement['name']}: {supplement['purpose']}, {', '.join(supplement['active_ingredients'])}")
+        else:
+            print("No supplements match the specified filters.")
